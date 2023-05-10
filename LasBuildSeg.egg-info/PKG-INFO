@@ -1,3 +1,25 @@
+Metadata-Version: 2.1
+Name: LasBuildSeg
+Version: 0.0.10
+Summary: Building Footrprint Extraction from Aerial LiDAR data
+Home-page: 
+Author: MertcanErdem
+Author-email: merak908@gmail.com
+License: GNU General Public License v2.0
+Keywords: Building,Lidar
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Science/Research
+Classifier: Intended Audience :: Developers
+Classifier: Operating System :: Microsoft :: Windows :: Windows 10
+Classifier: License :: OSI Approved :: GNU General Public License v2 (GPLv2)
+Classifier: Programming Language :: Python :: 3
+Classifier: Topic :: Scientific/Engineering :: GIS
+Classifier: Topic :: Scientific/Engineering :: Information Analysis
+Classifier: Topic :: Scientific/Engineering :: Image Recognition
+Classifier: Topic :: Scientific/Engineering :: Image Processing
+Description-Content-Type: text/markdown
+License-File: LICENSE.txt
+
 This Python package is BUilding Footprint Extractor Test
 
 This of example of an how you can run your code
