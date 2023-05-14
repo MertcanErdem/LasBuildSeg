@@ -12,3 +12,4 @@ LasBuildSeg.egg-info/SOURCES.txt
 LasBuildSeg.egg-info/dependency_links.txt
 LasBuildSeg.egg-info/requires.txt
 LasBuildSeg.egg-info/top_level.txt
+LasBuildSeg/.ipynb_checkpoints/LasBuildSeg-checkpoint.py

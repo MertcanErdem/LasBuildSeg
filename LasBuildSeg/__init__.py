@@ -8,3 +8,5 @@ from .LasBuildSeg import morphopen
 from .LasBuildSeg import filter_contours
 from .LasBuildSeg import close
 from .LasBuildSeg import write_geotiff
+from .LasBuildSeg import DSM_Transform
+from .LasBuildSeg import building_footprints_to_geojson

@@ -33,7 +33,7 @@ else:
         
 setup(
   name='LasBuildSeg',
-  version='0.0.10',
+  version='0.1.0',
   description='Building Footrprint Extraction from Aerial LiDAR data',
   long_description=long_description,
   long_description_content_type='text/markdown',  

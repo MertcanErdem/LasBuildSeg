@@ -39,7 +39,12 @@ import cv2
 from rasterio.transform import from_origin
 import scipy
 from rasterio.warp import calculate_default_transform, reproject, Resampling
-
+from rasterio.plot import show
+from rasterio.mask import mask
+import rasterio.features
+from shapely.geometry import shape, mapping
+import json
+from shapely.geometry import Polygon, MultiPolygon
 
 
 def generate_dsm(las_file_name: str, input_epsg: int, resolution):
@@ -224,22 +229,57 @@ def generate_ndhm(dtm_file, dsm_file):
 
 #Our algorithms
 
-# This function reads a geotiff file and returns the image and profile data.
-# filename: the path to the geotiff file
-# Returns a tuple with two values: the image data and a dictionary with metadata about the image.
+
 def read_geotiff(filename):
     with rasterio.open(filename) as src:
         img = src.read(1)
         profile = src.profile.copy()
+        profile.update({
+            'crs': 'EPSG:3857'})
     return img, profile
 
+# This function reads a geotiff file and returns the image and profile data.
+# filename: the path to the geotiff file
+# Returns a tuple with two values: the image data and a dictionary with metadata about the image.
+def DSM_Transform(DSM):
+    target_crs = 'EPSG:3857'
+
+    with rasterio.open(DSM) as src:
+        # Get the metadata of the input file
+        src_profile = src.profile.copy()
+
+        # Calculate the transform to the target CRS
+        dst_transform, dst_width, dst_height = calculate_default_transform(
+            src.crs, target_crs, src.width, src.height, *src.bounds)
+
+        # Update the metadata of the output file with the target CRS and nodata value
+        src_profile.update({
+            'crs': target_crs,
+            'transform': dst_transform,
+            'width': dst_width,
+            'height': dst_height,
+            'nodata': 0})
+
+        # Create the output file
+        with rasterio.open('dsm3857.tif', 'w', **src_profile) as dst:
+            # Reproject the input file to the target CRS
+            reproject(
+                source=rasterio.band(src, 1),
+                destination=rasterio.band(dst, 1),
+                src_transform=src.transform,
+                src_crs=src.crs,
+                dst_transform=dst_transform,
+                dst_crs=target_crs,
+                resampling=Resampling.nearest,
+                dst_nodata=0)
 
 # This function converts an image to 8-bit color depth.
 # img: the image data
-# Returns the image data converted to 8-bit color depth.
+# Returns the image data converted to 8-bit color depth.    
 def to_8bit(img):
     img_8bit = cv2.normalize(img, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8UC1)
     return img_8bit
+
 
 # This function applies an adaptive threshold to an image to separate objects from the background.
 # img_8bit: the 8-bit image data
@@ -249,6 +289,7 @@ def to_8bit(img):
 def threshold(img_8bit, block_size=51, constant=4.6):
     img_thresh = cv2.adaptiveThreshold(img_8bit, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, block_size, constant)
     return img_thresh
+
 
 # This function applies a morphological opening to an image to remove small objects.
 # img_thresh: the binary image data
@@ -268,10 +309,16 @@ def morphopen(img_thresh, kernel_size=3):
 # width_threshold: the minimum width of objects to keep
 # height_threshold: the minimum height of objects to keep
 # Returns a binary mask where the objects to keep are white and the rest is black.
-def filter_contours(img_open, profile, min_size=35, max_size=5000, squareness_threshold=0.3, width_threshold=3, height_threshold=3):
+def filter_contours(img_open, dem, profile, min_size=35, max_size=5000, squareness_threshold=0.3, width_threshold=3, height_threshold=3, tri_threshold=3):
+    
     contours, _ = cv2.findContours(img_open.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     pixel_size = abs(profile['transform'][0])
     building_mask = np.zeros_like(img_open, dtype=np.uint8)
+
+    # Compute the Terrain Ruggedness Index (TRI) from the DEM
+    dx, dy = np.gradient(dem)
+    tri = np.sqrt(dx**2 + dy**2)
+    tri /= pixel_size
 
     for contour in contours:
         rect = cv2.minAreaRect(contour)
@@ -280,26 +327,55 @@ def filter_contours(img_open, profile, min_size=35, max_size=5000, squareness_th
             w, h = h, w
         squareness = w / h if h != 0 else 0
         size = w * h * pixel_size ** 2
-        if squareness >= squareness_threshold and min_size <= size <= max_size and w >= width_threshold and h >= height_threshold:
+
+        # Compute the average TRI within the building contour
+        mask = np.zeros_like(img_open, dtype=np.uint8)
+        cv2.drawContours(mask, [contour], -1, 1, -1)
+        tri_values = tri[mask == 1]
+        tri_mean = np.mean(tri_values)
+
+        if squareness >= squareness_threshold and min_size <= size <= max_size and w >= width_threshold and h >= height_threshold and tri_mean <= tri_threshold:
             cv2.drawContours(building_mask, [contour], -1, 255, -1)
 
     return building_mask
 
+
+
+
 def close(building_mask, CloseKernel_size):
-    # Create a kernel for morphological closing operation
     kernel = np.ones((CloseKernel_size, CloseKernel_size), np.uint8)
-    # Perform morphological closing operation on the input image using the kernel
     building_mask_closed = cv2.morphologyEx(building_mask, cv2.MORPH_CLOSE, kernel)
     return building_mask_closed
 
 def write_geotiff(filename, data, profile):
-    # Update the profile with the required metadata for writing a GeoTIFF file
     profile.update(count=1, dtype=rasterio.uint8, crs=rasterio.crs.CRS.from_epsg(3857))
-    # Open a new GeoTIFF file in write mode using the profile information
     with rasterio.open(filename, 'w', **profile) as dst:
-        # Set the CRS information for the output file
         dst.crs = profile['crs']  # Add CRS information
         dst.write(data.astype(rasterio.uint8), 1)
-#input_crs = pyproj.CRS.from_epsg(input_epsg)        
-#crs=pyproj.CRS.from_epsg(3857)
 
+
+def building_footprints_to_geojson(tiff_file, geojson_file):
+    # Load the building mask
+    with rasterio.open(tiff_file) as src:
+        building_mask = src.read(1)
+
+    # Create a mask that is True for building pixels and False for all other pixels
+    building_only_mask = (building_mask == 0).astype('uint8')
+
+    # Polygonize the building pixels to get the building footprints as polygons
+    building_polygons = list(rasterio.features.shapes(building_only_mask, transform=src.transform))
+
+    # Convert the building polygons to a GeoJSON FeatureCollection
+    features = []
+    for polygon, value in building_polygons:
+        if value == 0:
+            feature = {'type': 'Feature',
+                       'geometry': mapping(shape(polygon)),
+                       'properties': {'value': int(value)}}
+            features.append(feature)
+
+    geojson_dict = {'type': 'FeatureCollection', 'features': features, 'crs': {'type': 'name', 'properties': {'name': 'EPSG:3857'}}}
+
+    # Write the GeoJSON file to disk
+    with open(geojson_file, 'w') as f:
+        json.dump(geojson_dict, f)
