@@ -10,9 +10,17 @@ This example includes a point cloud dataset provided by GISCUP 2022. If you don'
 
 You should have Geopandas python library in your computer.
 
-1. Clone the TestLaz folder:
+1. Install the LasBuildSeg library using:
+```bash
+pip install LasBuildSeg
+```
+and also install Geopandas Using
+```bash
+pip install geopandas
+```
+2. Clone the TestLaz folder.
 
-2. Run the TestSingleLaz.py script
+3. Run the TestSingleLaz.py script.
 
 # You can edit the parameters of the TestSinlgeLaz.py as bellow 
 ```python
