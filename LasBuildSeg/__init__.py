@@ -4,9 +4,10 @@ from .LasBuildSeg import generate_ndhm
 from .LasBuildSeg import read_geotiff
 from .LasBuildSeg import to_8bit
 from .LasBuildSeg import threshold
-from .LasBuildSeg import morphopen
+from .LasBuildSeg import morph_open
 from .LasBuildSeg import filter_contours
 from .LasBuildSeg import close
 from .LasBuildSeg import write_geotiff
-from .LasBuildSeg import DSM_Transform
+from .LasBuildSeg import DSM_transform
 from .LasBuildSeg import building_footprints_to_geojson
+from .LasBuildSeg import filter_contoursntri

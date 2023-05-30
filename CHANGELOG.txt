@@ -1,8 +1,9 @@
 Change log
 ==========
 
-0.1.0(10/05/2023)
+0.1.20(10/05/2023)
 -------------------
 
-Fourth Working Relase
-updated readme
+Eleventh Working Relase
+
+Fixed a bug
