@@ -11,7 +11,7 @@ This example includes a point cloud dataset provided by GISCUP 2022. If you don'
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/your-username/your-repository.git
+git clone https://github.com/MErtcanErdem/LasBuildSeg.git
 ```
 
 2. Navigate to the `testlaz` folder:
