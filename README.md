@@ -17,7 +17,7 @@ git clone https://github.com/MertcanErdem/LasBuildSeg.git
 2. Navigate to the `testlaz` folder:
 
 ```bash
-cd your-repository/testlaz
+cd LasBuildSeg/testlaz
 ```
 
 3. Run the TestsingleLaz script:
