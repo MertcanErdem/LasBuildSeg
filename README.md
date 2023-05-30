@@ -8,22 +8,11 @@ This example includes a point cloud dataset provided by GISCUP 2022. If you don'
 
 ## Usage
 
-1. Clone the repository:
+You should have Geopandas python library in your computer.
 
-```bash
-git clone https://github.com/MertcanErdem/LasBuildSeg.git
-```
+1. Clone the TestLaz folder:
 
-2. Navigate to the `testlaz` folder:
-
-```bash
-cd LasBuildSeg/testlaz
-```
-
-3. Run the TestsingleLaz script:
-```bash
-python TestSingleLaz.py
-```
+2. Run the TestSingleLaz.py script
 
 # You can edit the parameters of the TestSinlgeLaz.py as bellow 
 ```python
