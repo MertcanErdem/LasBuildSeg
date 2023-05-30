@@ -58,8 +58,8 @@ import LasBuildSeg as Lasb
 import numpy as np
 
 # Define input parameters
-input_laz = "USGS_LPC_IL_HicksDome_FluorsparDistrict_2019_D19_2339_5650.laz"
-GroundTruth = "USGS_LPC_IL_HicksDome_FluorsparDistrict_2019_D19_2339_5650_gt_buildings.geojson"  # Path to the input laz/las data file
+input_laz = "USGS_LPC_IL_HicksDome_FluorsparDistrict_2019_D19_2339_5650.laz" # Path to the input to Your Point Cloud data in .laz/.las format.
+GroundTruth = "USGS_LPC_IL_HicksDome_FluorsparDistrict_2019_D19_2339_5650_gt_buildings.geojson"  # Path to the input to Your Ground Truth file
 epsg_code = 6457 # EPSG code of the input laz data
 multy = 1200  # Multiplication factor for DSM height enhancement
 intermethod = 'nearest'  # Interpolation method ('cubic', 'nearest', or 'linear')
