@@ -22,7 +22,7 @@ pip install geopandas
 
 3. Run the TestSingleLaz.py script.
 
-# You can edit the parameters of the TestSinlgeLaz.py as bellow 
+# Edit the parameters of the TestSingleLaz.py  
 ```python
 # Define input parameters
 input_laz = "USGS_LPC_IL_HicksDome_FluorsparDistrict_2019_D19_2339_5650.laz" # Path to your point cloud data
