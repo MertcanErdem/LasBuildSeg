@@ -7,21 +7,18 @@ The TestsingleLaz Python script can be used to test the Intersection over Union 
 This example includes a point cloud dataset provided by GISCUP 2022. If you don't have your own data to test, you can use this dataset. The script also utilizes some functions from GISCUP 2022's [eval.py](https://sigspatial2022.sigspatial.org/giscup/submit.html).
 
 ## Requirements
--pyproj 3.5.0
 
--numpy 1.23.5
+| Library  | Version |
+| ------------- | ------------- | 
+| pyproj  | 3.5.0  | 
+| numpy  | 1.23.5  |
+| scipy  | 1.10.1 | 
+| rasterio  | 1.3.4  |
+| opencv-python  | 4.7.0.72  | 
+| laspy  | 2.0.0  |
+| proj   | 0.2.0 | 
+| shapely  | 1.8.4 |
 
--scipy 1.10.1
-
--rasterio 1.3.4
-
--opencv-python 4.7.0.72
-
--laspy 2.0.0
-
--proj 0.2.0
-
--shapely 1.8.4
 ## Usage
 
 You should have Geopandas python library in your computer.
