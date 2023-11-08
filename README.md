@@ -49,6 +49,8 @@ In our Testlaz folder we use the .laz file with the ID of 11 which is located in
 
 You should have Geopandas python library in your computer and  if your PROJ_LIB is set in your program's environment and points to an older version of PROJ, you must unset this variable.You can override this location by setting an environment variable "PROJ_LIB", whose value should be the directory containing the file "proj.db". You can learn the directory you are using by ``pyproj.datadir.get_data_dir()`` then you can change your PROJ_LIB enviorment variable to `C:\Users\<Yourusername>\anaconda3\lib\site-packages\pyproj\proj_dir\share\proj` to get it to work. You can also try to fix the error temprotly by adding the line ``pyproj.datadir.set_data_dir(C:\Users\<Yourusername>\anaconda3\lib\site-packages\pyproj\proj_dir\share\proj)`` in the python script.
 
+But if you dont want to do all of that just run the script in a new enviorment.
+
 1. Install the LasBuildSeg library using:
 ```bash
 pip install LasBuildSeg
