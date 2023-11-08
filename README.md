@@ -43,7 +43,8 @@ This example includes a point cloud dataset provided by GISCUP 2022. If you don'
 ## Usage
 
 In our Testlaz folder we use the .laz file with the ID of 11 which is located in USA.
-![image](https://github.com/MertcanErdem/LasBuildSeg/assets/92017528/7866564d-ad2b-44b3-838e-0256fa4fcf99)
+![image](https://github.com/MertcanErdem/LasBuildSeg/assets/92017528/cd70bd3c-f140-4940-b2cf-b443b75405ca)
+
 
 
 You should have Geopandas python library in your computer.
