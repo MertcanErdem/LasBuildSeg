@@ -47,7 +47,7 @@ In our Testlaz folder we use the .laz file with the ID of 11 which is located in
 
 
 
-You should have Geopandas python library in your computer.
+You should have Geopandas python library in your computer and  if your PROJ_LIB is set in your program's environment and points to an older version of PROJ, you must unset this variable.You can override this location by setting an environment variable "PROJ_LIB", whose value should be the directory containing the file "proj.db".
 
 1. Install the LasBuildSeg library using:
 ```bash
