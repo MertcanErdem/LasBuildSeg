@@ -8,7 +8,8 @@ The TestsingleLaz Python script can be used to test the Intersection over Union 
 ## Data
 This example includes a point cloud dataset provided by GISCUP 2022. If you don't have your own data to test, you can use this [dataset](https://sigspatial2022.sigspatial.org/giscup/download.html). The script also utilizes some functions from GISCUP 2022's [eval.py](https://sigspatial2022.sigspatial.org/giscup/submit.html).
 
-| ID| EPSG Code | Point Denstiy(m2) | Number of buildings | Min Area(m2) | Max Area(m2) |
+
+| ID| EPSG Code | Point Denstiy(pts/m$`^2`$) | Number of buildings | Min Area(m$`^2`$) | Max Area(m$`^2`$) |
 |---------|---------|---------|---------|---------|---------|
 | 0 | 6345| 5.69| 83| 6.61| 347.91 |
 | 4 | 6434| 5.38 | 55 | 8.58 | 340.69|
