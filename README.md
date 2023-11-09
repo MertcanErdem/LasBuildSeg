@@ -65,6 +65,7 @@ pip install geopandas
 import geopandas as gpd
 import LasBuildSeg as Lasb
 import numpy as np
+import os
 
 # Define input parameters
 input_laz = 'USGS_LPC_IL_HicksDome_FluorsparDistrict_2019_D19_2339_5650.laz'  # Path to the input laz/las data file
@@ -80,25 +81,12 @@ tri_threshold = 4  # Terrain Ruggedness Index threshold
 multy = 1200  # Multiplication factor for DSM height enhancement
 output_number = 11 # use this variable so you can change name of every output you get automaticly
 
-
 # Generate DSM and DTM
 Lasb.generate_dsm(input_laz, epsg_code, intermethod)
 Lasb.generate_dtm(input_laz, epsg_code, intermethod, multy)
 
 # Generate NDHM
 Lasb.generate_ndhm('dtm.tif', 'dsm.tif')
-
-import sys, os
-
-# Disable
-def blockPrint():
-    sys.stdout = open(os.devnull, 'w')
-
-# Restore
-def enablePrint():
-    sys.stdout = sys.__stdout__
-
-
 
 def calc_iou(gdf_groundtruth, gdf_predict):
     """Calculates intersection over union (iou) score.
@@ -150,7 +138,6 @@ def calc_metrics(groundtruth_file, predict_file):
         iou = iou * (len(gdf_groundtruth)/len(gdf_predict))
     
     return iou
-    
 
 # Define contour filtering parameters (You dont need to change this ones)
 min_size = 35
@@ -160,11 +147,6 @@ width_threshold = 3
 height_threshold = 3
 CloseKernel_size = 15
 
-
-
-
-
-
 img, profile = Lasb.read_geotiff('ndhm.tif')
 Lasb.DSM_transform('dsm.tif')
 dem, _ = Lasb.read_geotiff('dsm3857.tif')
@@ -172,14 +154,9 @@ img_8bit = Lasb.to_8bit(img)
 
 img_thresh = Lasb.threshold(img_8bit, block_size, constant)
 img_open = Lasb.morph_open(img_thresh, kernel_size)
-
-blockPrint()
-import os
-
 # Create output folders for each step if they don't exist
 output_base_dir = 'output'  # Change this to your desired output base directory
 os.makedirs(output_base_dir, exist_ok=True)
-
 # Function to write files to the appropriate folder
 def write_output(filename, data, profile, folder_name):
     output_folder = os.path.join(output_base_dir, folder_name)
@@ -202,15 +179,12 @@ write_output('S2_TRI_' + str(output_number) + '.tif', building_mask, profile, 'S
 building_mask_closed = Lasb.close(building_mask, CloseKernel_size)
 write_output('S3_MorphClose_' + str(output_number) + '.tif', building_mask_closed, profile, 'S3_MorphClose')
 
-# Make sure to close any open files or resources as needed
-
-
-enablePrint()
-
-
 notri_IOU = calc_metrics(GroundTruth, os.path.join(output_base_dir, 'S1_Contour', 'S1_Contour_' + str(output_number) + '.geojson'))
 tri_IOU = calc_metrics(GroundTruth, os.path.join(output_base_dir, 'S2_TRI', 'S2_TRI_' + str(output_number) + '.geojson'))
 final_IOU= calc_metrics(GroundTruth, os.path.join(output_base_dir, 'S3_MorphClose', 'S3_MorphClose_' + str(output_number) + '.geojson'))
+notri_IOU=round(notri_IOU,2)
+tri_IOU =round(tri_IOU ,2)
+final_IOU =round(final_IOU,2)
 
 print("S1 Contour Detection Iou %",notri_IOU)
 print("S2 Contour Detection wit TRI Iou %",tri_IOU)
