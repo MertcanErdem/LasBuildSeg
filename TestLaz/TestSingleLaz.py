@@ -24,15 +24,8 @@ Lasb.generate_dtm(input_laz, epsg_code, intermethod, multy)
 # Generate NDHM
 Lasb.generate_ndhm('dtm.tif', 'dsm.tif')
 
-import sys, os
+import os
 
-# Disable
-def blockPrint():
-    sys.stdout = open(os.devnull, 'w')
-
-# Restore
-def enablePrint():
-    sys.stdout = sys.__stdout__
 
 
 
@@ -109,8 +102,7 @@ img_8bit = Lasb.to_8bit(img)
 img_thresh = Lasb.threshold(img_8bit, block_size, constant)
 img_open = Lasb.morph_open(img_thresh, kernel_size)
 
-blockPrint()
-import os
+
 
 # Create output folders for each step if they don't exist
 output_base_dir = 'output'  # Change this to your desired output base directory
@@ -138,16 +130,15 @@ write_output('S2_TRI_' + str(output_number) + '.tif', building_mask, profile, 'S
 building_mask_closed = Lasb.close(building_mask, CloseKernel_size)
 write_output('S3_MorphClose_' + str(output_number) + '.tif', building_mask_closed, profile, 'S3_MorphClose')
 
-# Make sure to close any open files or resources as needed
-
-
-enablePrint()
-
 
 notri_IOU = calc_metrics(GroundTruth, os.path.join(output_base_dir, 'S1_Contour', 'S1_Contour_' + str(output_number) + '.geojson'))
 tri_IOU = calc_metrics(GroundTruth, os.path.join(output_base_dir, 'S2_TRI', 'S2_TRI_' + str(output_number) + '.geojson'))
 final_IOU= calc_metrics(GroundTruth, os.path.join(output_base_dir, 'S3_MorphClose', 'S3_MorphClose_' + str(output_number) + '.geojson'))
 
-print("S1 Contour Detection Iou %",notri_IOU)
-print("S2 Contour Detection wit TRI Iou %",tri_IOU)
-print("S3 Morphological Close Iou %",final_IOU)
+notri_IOU=round(notri_IOU,2)
+tri_IOU =round(tri_IOU ,2)
+final_IOU =round(final_IOU,2)
+
+print("S1 Contour Detection IoU is ",notri_IOU)
+print("S2 Contour Detection wit TRI IoU is ",tri_IOU)
+print("S3 Morphological Close IoU is ",final_IOU)
