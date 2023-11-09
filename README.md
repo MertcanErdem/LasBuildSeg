@@ -186,9 +186,9 @@ notri_IOU=round(notri_IOU,2)
 tri_IOU =round(tri_IOU ,2)
 final_IOU =round(final_IOU,2)
 
-print("S1 Contour Detection Iou %",notri_IOU)
-print("S2 Contour Detection wit TRI Iou %",tri_IOU)
-print("S3 Morphological Close Iou %",final_IOU)
+print("S1 Contour Detection IoU is ",notri_IOU)
+print("S2 Contour Detection wit TRI IoU is ",tri_IOU)
+print("S3 Morphological Close IoU is ",final_IOU)
 ``` 
 
 3. Run the TestSingleLaz.py script and get your resaults.
