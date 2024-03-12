@@ -1,9 +1,10 @@
 # LasBuildSeg Building Footprint Extraction from LiDAR
 
-This Python package is Building Footprint Extractor Test
+This Python package is Building Footprint Extractor
 
 The TestsingleLaz Python script can be used to test the Intersection over Union (IoU) rate of point cloud data and building footprints. To perform the test, navigate to the `testlaz` folder and run the script.
 
+>:white_check_mark: **If you are using this plugin for scientific research, please cite the paper** <a href=https://dl.acm.org/doi/10.1145/3589132.3625574>`<b>Reproducible Extraction of Building Footprints from Airborne LiDAR Data</b></a>
 
 ## Data
 This example includes a point cloud dataset provided by GISCUP 2022. If you don't have your own data to test, you can use this [dataset](https://sigspatial2022.sigspatial.org/giscup/download.html). The script also utilizes some functions from GISCUP 2022's [eval.py](https://sigspatial2022.sigspatial.org/giscup/submit.html).
