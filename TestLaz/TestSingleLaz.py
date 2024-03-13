@@ -10,11 +10,11 @@ intermethod = 'nearest'  # Interpolation method ('cubic', 'nearest', or 'linear'
 
 # You can change this paramets to see how it effects the building maps
 constant = 3.6  # Adaptive threshold constant
-block_size = 91  # Adaptive threshold block size
+block_size = 51  # Adaptive threshold block size
 kernel_size = 3  # Morphological open kernel size
 tri_threshold = 4  # Terrain Ruggedness Index threshold
 multy = 1200  # Multiplication factor for DSM height enhancement
-output_number = 11 # use this variable so you can change name of every output you get automaticly
+output_number = 12 # use this variable so you can change name of every output you get automaticly
 
 
 # Generate DSM and DTM
@@ -130,6 +130,21 @@ write_output('S2_TRI_' + str(output_number) + '.tif', building_mask, profile, 'S
 building_mask_closed = Lasb.close(building_mask, CloseKernel_size)
 write_output('S3_MorphClose_' + str(output_number) + '.tif', building_mask_closed, profile, 'S3_MorphClose')
 
+# Define output base directory
+output_base_dir = 'output'
+
+# Define paths to height data (DSM) and output GeoJSON files
+height_file_path = 'dsm3857.tif'
+output_geojson_file_path = os.path.join(output_base_dir, 'S3_MorphClose', 'S3_MorphClose_' + str(output_number) + '.geojson')
+
+# Read height data (DSM)
+height_data, height_profile = Lasb.read_geotiff(height_file_path)
+
+# Calculate average height for each polygon
+gdf_with_height = Lasb.calculate_average_height(output_geojson_file_path, height_data,height_profile)
+
+# Write modified GeoJSON file with average height information
+gdf_with_height.to_file(os.path.join(output_base_dir, 'S3_MorphClose', 'S3_MorphClose_' + str(output_number) + '_with_height.geojson'), driver='GeoJSON')
 
 notri_IOU = calc_metrics(GroundTruth, os.path.join(output_base_dir, 'S1_Contour', 'S1_Contour_' + str(output_number) + '.geojson'))
 tri_IOU = calc_metrics(GroundTruth, os.path.join(output_base_dir, 'S2_TRI', 'S2_TRI_' + str(output_number) + '.geojson'))
