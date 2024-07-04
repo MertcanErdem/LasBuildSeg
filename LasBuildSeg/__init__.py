@@ -11,3 +11,4 @@ from .LasBuildSeg import write_geotiff
 from .LasBuildSeg import DSM_transform
 from .LasBuildSeg import building_footprints_to_geojson
 from .LasBuildSeg import filter_contoursntri
+from .LasBuildSeg import calculate_average_height

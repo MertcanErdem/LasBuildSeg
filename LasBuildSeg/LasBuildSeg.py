@@ -12,6 +12,7 @@ from rasterio.mask import mask
 import rasterio.features
 from shapely.geometry import shape, mapping
 import json
+import geopandas as gpd
 
 def generate_dsm(las_file_path: str, input_epsg: int, interpolation_method: str):
     """
@@ -441,3 +442,22 @@ def building_footprints_to_geojson(tiff_file, geojson_file):
     with open(geojson_file, 'w') as f:
         json.dump(geojson_dict, f)
     print('Output GeoJSON is ready')
+
+
+def calculate_average_height(geojson_file, height_data,height_profile):
+    gdf = gpd.read_file(geojson_file)
+    avg_heights = []
+    for index, row in gdf.iterrows():
+        polygon = row['geometry']
+        polygon_heights = []
+        for point in polygon.exterior.coords:
+            # Extract height from height data at the coordinate location
+            x, y = point[0], point[1]
+            height = height_data[int((y - height_profile['transform'][5]) / abs(height_profile['transform'][4]))][int((x - height_profile['transform'][2]) / height_profile['transform'][0])]
+            polygon_heights.append(height)
+        # Calculate average height for the polygon
+        avg_height = np.mean(polygon_heights)
+        avg_heights.append(avg_height)
+    # Add average height to GeoDataFrame
+    gdf['average_height'] = avg_heights
+    return gdf
