@@ -1,0 +1,47 @@
+# This file contains metadata for your plugin.
+
+# This file should be included when you package your plugin.# Mandatory items:
+
+[general]
+name=LasBuildSeg
+qgisMinimumVersion=3.4
+description=An automated building footprint extraction pipeline and Python library from LiDAR point clouds.
+version=0.1
+author=Mertcan Erdem/Berk Anbaroğlu
+email=merterdemcan@hotmail.com
+
+about=LasBuildSeg is an automated processing pipeline and Python library designed for extracting accurate building footprints from LiDAR point cloud data (.las/.laz format). Key Features & Workflow: • Automatically calculates adaptive height and TRI (Terrain Ruggedness Index) thresholds based on coarse-scale nDHM analysis. • Utilizes CSF (Cloth Simulation Filter) for robust ground filtering and DTM generation. • Implements morphological opening and FXAA-style edge smoothing for noise reduction. • Offers advanced false-positive elimination tools, including height variance, convex hull ratio, and elongation filters. • Supports per-connected-component alpha shape extraction to prevent vegetation merging and deliver crisp building boundaries. • Exports ready-to-use vector footprints reprojected into Web Mercator (EPSG:3857) alongside debug layers for threshold tuning.
+
+tracker=https://github.com/mertcanerdem/LasBuildSeg/issues
+repository=https://github.com/mertcanerdem/LasBuildSeg
+# End of mandatory metadata
+
+# Recommended items:
+
+hasProcessingProvider=no
+# Uncomment the following line and add your changelog:
+# changelog=
+
+# Tags are comma separated with spaces allowed
+tags=python, lidar, pointcloud, building-extraction, las, laz, geomatics
+
+homepage=https://github.com/mertcanerdem/LasBuildSeg
+category=Plugins
+icon=icon.png
+# experimental flag
+experimental=True
+
+# deprecated flag (applies to the whole plugin, not just a single version)
+deprecated=False
+
+# Since QGIS 3.8, a comma separated list of plugins to be installed
+# (or upgraded) can be specified.
+# Check the documentation for more information.
+# plugin_dependencies=
+
+Category of the plugin: Raster, Vector, Database or Web
+# category=
+
+# If the plugin can run on QGIS Server.
+server=False
+
