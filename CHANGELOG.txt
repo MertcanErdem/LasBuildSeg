@@ -1,9 +1,49 @@
 Change log
 ==========
 
-0.1.20(10/05/2023)
+0.2.1 (18/06/2026)
 -------------------
 
-Eleventh Working Relase
+Redistribution / verification release.
 
-Fixed a bug
+  - Verified the full adaptive pipeline against TestLaz/TestSingleLaz.py:
+    every Lasb.* call site checked for correct argument count and keywords,
+    and the file-output dependency chain confirmed in order.
+  - No API changes from 0.2.0; version bump for redistribution.
+
+0.2.0 (18/06/2026)
+-------------------
+
+Adaptive pipeline release.
+
+Added (reusable library functions):
+  - generate_dsm_last_returns: last-return DSM with void masking
+  - laz_pre_analysis: derive CSF params from point density & terrain slope
+  - generate_dtm_with_csf_last_returns: Cloth Simulation Filter based DTM
+  - align_rasters: reproject/resample a raster onto a reference grid
+  - analyze_low_res_ndhm: adaptive height & TRI thresholds from a coarse nDHM
+  - fxaa_like_smoothing: edge-aware smoothing for binary masks
+  - extract_building_footprints_with_alphashape: alpha-shape footprint extraction
+  - rasterize_geojson: rasterize footprints onto a reference grid
+
+Changed:
+  - calculate_average_height rewritten as a robust, mask-based implementation
+    (handles MultiPolygons, reprojects to the raster CRS, ignores nodata).
+    Now returns an 'avg_height' column.
+  - TestLaz/TestSingleLaz.py rewritten as the adaptive pipeline using the new
+    functions above.
+  - requirements.txt now lists every dependency (including cloth-simulation-filter,
+    alphashape and matplotlib), so 'pip install LasBuildSeg' pulls everything.
+  - README updated for the adaptive pipeline.
+
+Notes:
+  - CSF, alphashape and matplotlib are still imported lazily inside the functions
+    that use them, so the package imports even if a wheel is unavailable on your
+    platform.
+
+0.1.27 (13/03/2024)
+-------------------
+
+Fourteenth Release
+
+Geopandas Requirements
