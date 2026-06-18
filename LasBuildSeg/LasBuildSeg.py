@@ -444,20 +444,540 @@ def building_footprints_to_geojson(tiff_file, geojson_file):
     print('Output GeoJSON is ready')
 
 
-def calculate_average_height(geojson_file, height_data,height_profile):
-    gdf = gpd.read_file(geojson_file)
+def calculate_average_height(geojson_file, height_data, height_profile):
+    """
+    Calculate the average height of each building footprint by sampling a
+    height raster (e.g. an nDHM/DSM) inside every polygon.
+
+    This is a robust, mask-based implementation: it rasterizes each geometry
+    against the height raster instead of sampling only the polygon vertices,
+    handles MultiPolygons, reprojects the footprints to the raster CRS when
+    needed, and ignores nodata / non-positive cells.
+
+    Args:
+        geojson_file (str): Path to the building-footprint GeoJSON file.
+        height_data (numpy.ndarray): The height raster (single band).
+        height_profile (dict): Rasterio profile of ``height_data`` (must
+            contain ``transform``, ``height``, ``width`` and, ideally,
+            ``crs`` and ``nodata``).
+
+    Returns:
+        geopandas.GeoDataFrame: The footprints with an added ``avg_height``
+        column. Returns an empty GeoDataFrame if the input cannot be read.
+    """
+    try:
+        gdf = gpd.read_file(geojson_file)
+        if gdf.empty:
+            print(f"Warning: {geojson_file} is empty. No heights to calculate.")
+            return gdf
+    except Exception as e:
+        print(f"Error reading {geojson_file} for height calculation: {e}")
+        return gpd.GeoDataFrame()
+
+    # Reproject footprints to match the raster CRS, if we know it.
+    raster_crs = height_profile.get('crs', None)
+    if raster_crs is not None and gdf.crs is not None and gdf.crs != raster_crs:
+        gdf = gdf.to_crs(raster_crs)
+
+    nodata_value = height_profile.get('nodata', None)
     avg_heights = []
-    for index, row in gdf.iterrows():
-        polygon = row['geometry']
-        polygon_heights = []
-        for point in polygon.exterior.coords:
-            # Extract height from height data at the coordinate location
-            x, y = point[0], point[1]
-            height = height_data[int((y - height_profile['transform'][5]) / abs(height_profile['transform'][4]))][int((x - height_profile['transform'][2]) / height_profile['transform'][0])]
-            polygon_heights.append(height)
-        # Calculate average height for the polygon
-        avg_height = np.mean(polygon_heights)
+
+    for geom in gdf.geometry:
+        if geom is None or geom.is_empty:
+            avg_heights.append(0.0)
+            continue
+
+        mask = rasterio.features.geometry_mask(
+            [geom],
+            out_shape=(height_profile['height'], height_profile['width']),
+            transform=height_profile['transform'],
+            invert=True,
+            all_touched=True
+        )
+        heights = height_data[mask]
+        if nodata_value is not None:
+            heights = heights[heights != nodata_value]
+        valid_heights = heights[heights > 0]
+        avg_height = float(np.mean(valid_heights)) if valid_heights.size > 0 else 0.0
         avg_heights.append(avg_height)
-    # Add average height to GeoDataFrame
-    gdf['average_height'] = avg_heights
+
+    gdf['avg_height'] = avg_heights
     return gdf
+
+# ======================================================================
+# Adaptive pipeline additions (ported & generalized from the
+# "activeparams / adaptiveparams" driver script).
+#
+# These functions extend the classic threshold-based workflow above with:
+#   * last-return DSM generation with void masking,
+#   * CSF (Cloth Simulation Filter) based DTM generation,
+#   * automatic / adaptive parameter estimation,
+#   * alpha-shape building-footprint extraction,
+#   * FXAA-style edge smoothing, raster alignment and GeoJSON rasterization.
+#
+# Heavy / optional third-party packages (CSF, alphashape, matplotlib) are
+# imported lazily inside the functions that need them, so importing
+# LasBuildSeg never fails just because an optional dependency is missing.
+# ======================================================================
+
+
+def generate_dsm_last_returns(las_file_path, input_epsg, interpolation_method,
+                              resolution=1, output_path='dsm.tif',
+                              void_filter_size=3, nodata_value=-9999.0):
+    """
+    Generate a DSM from a LAS/LAZ file using ONLY last returns.
+
+    Cells with no nearby LiDAR returns (e.g. water bodies, scan shadows) are
+    masked to ``nodata_value`` instead of being interpolated across, which
+    avoids "smearing" the surface over voids.
+
+    Args:
+        las_file_path (str): Path to the LAS/LAZ file.
+        input_epsg (int): EPSG code of the input CRS.
+        interpolation_method (str): 'nearest', 'linear' or 'cubic'.
+        resolution (float): Output cell size in CRS units. Default 1.
+        output_path (str): Output GeoTIFF path. Default 'dsm.tif'.
+        void_filter_size (int): Neighbourhood size for the void-tolerance
+            dilation. Larger values tolerate sparser point clouds. Default 3.
+        nodata_value (float): Value written to masked/void cells.
+
+    Returns:
+        str: The output path on success, or ``None`` if no last returns exist.
+    """
+    from scipy.ndimage import maximum_filter
+
+    print(f"[i] Generating DSM using Last Returns from: {las_file_path}")
+
+    las_file = laspy.read(las_file_path)
+    input_crs = pyproj.CRS.from_epsg(input_epsg)
+
+    last_return_mask = las_file.return_number == las_file.number_of_returns
+    x = np.array(las_file.x)[last_return_mask]
+    y = np.array(las_file.y)[last_return_mask]
+    z = np.array(las_file.z)[last_return_mask]
+
+    print(f"    - Total Points: {len(las_file.x)}")
+    print(f"    - Last Return Points Used: {len(x)}")
+
+    if len(x) == 0:
+        print("[!] Error: No last return points found.")
+        return None
+
+    x_min = np.floor(x.min())
+    x_max = np.ceil(x.max())
+    y_min = np.floor(y.min())
+    y_max = np.ceil(y.max())
+
+    grid_x, grid_y = np.meshgrid(
+        np.arange(x_min, x_max, resolution),
+        np.arange(y_min, y_max, resolution)
+    )
+
+    dsm = griddata((x, y), z, (grid_x, grid_y), method=interpolation_method)
+
+    # --- VOID MASKING: flag cells with no nearby LiDAR returns ---
+    cols = ((x - x_min) / resolution).astype(int)
+    rows = ((y - y_min) / resolution).astype(int)
+    valid = (rows >= 0) & (rows < grid_x.shape[0]) & (cols >= 0) & (cols < grid_x.shape[1])
+    rows, cols = rows[valid], cols[valid]
+
+    counts = np.zeros(grid_x.shape, dtype=np.int32)
+    np.add.at(counts, (rows, cols), 1)
+
+    has_data = maximum_filter(counts > 0, size=void_filter_size)
+
+    dsm = np.where(has_data, dsm, nodata_value)
+    dsm = np.where(np.isnan(dsm), nodata_value, dsm).astype(np.float32)
+
+    print(f"    - Void cells masked: {(~has_data).sum()} of {has_data.size}")
+
+    with rasterio.open(
+        output_path, 'w', driver='GTiff',
+        height=dsm.shape[0], width=dsm.shape[1], count=1,
+        dtype='float32', crs=input_crs, nodata=nodata_value,
+        transform=rasterio.transform.Affine(resolution, 0, x_min, 0, resolution, y_min)
+    ) as dst:
+        dst.write(dsm, 1)
+
+    print('[\u2713] Success in Creating Last-Return DSM (with void masking)')
+    return output_path
+
+
+def laz_pre_analysis(laz_path):
+    """
+    Scan a raw LAS/LAZ file to derive point density and global terrain slope,
+    then map those characteristics onto sensible CSF (Cloth Simulation Filter)
+    parameters.
+
+    Args:
+        laz_path (str): Path to the LAS/LAZ file.
+
+    Returns:
+        dict: ``{'cloth_resolution', 'rigidness', 'class_threshold'}``.
+    """
+    import math
+
+    print(f"[i] Phase 1: Analyzing raw .laz file: {laz_path}")
+
+    las = laspy.read(laz_path)
+
+    # 1. Point density (points per m^2)
+    area = (las.header.maxs[0] - las.header.mins[0]) * (las.header.maxs[1] - las.header.mins[1])
+    point_count = las.header.point_count
+    point_density = point_count / area if area else 0.0
+    print(f"[\u2713] Point Density: {point_density:.2f} points/m\u00b2")
+
+    # 2. Global topography / steepness via least-squares plane fit
+    coords = np.vstack((las.x, las.y, np.ones(point_count))).T
+    z = las.z
+    plane_coeffs, _, _, _ = np.linalg.lstsq(coords, z, rcond=None)
+    global_slope = math.sqrt(plane_coeffs[0] ** 2 + plane_coeffs[1] ** 2)
+    print(f"[\u2713] Global Terrain Slope: {global_slope:.3f}")
+
+    # cloth_resolution
+    if point_density > 15:
+        cloth_res = 0.5
+    elif point_density > 5:
+        cloth_res = 1.0
+    else:
+        cloth_res = 2.0
+
+    # rigidness
+    if global_slope > 0.3:       # very steep
+        rigidness = 1
+    elif global_slope > 0.1:     # moderately steep
+        rigidness = 2
+    else:                        # flat
+        rigidness = 3
+
+    class_thresh = 0.1
+
+    print(f"[i] CSF Params Set: Res={cloth_res}, Rigidness={rigidness}, Thresh={class_thresh}")
+
+    return {
+        'cloth_resolution': cloth_res,
+        'rigidness': rigidness,
+        'class_threshold': class_thresh,
+    }
+
+
+def generate_dtm_with_csf_last_returns(input_laz, epsg_code, reference_dsm,
+                                       csf_params, intermethod='nearest',
+                                       output_path='dtm_csf.tif'):
+    """
+    Generate a DTM with the Cloth Simulation Filter (CSF), using only last
+    returns as input and snapping the output grid to a reference DSM.
+
+    Requires the optional ``CSF`` package (``pip install cloth-simulation-filter``).
+
+    Args:
+        input_laz (str): Path to the LAS/LAZ file.
+        epsg_code (int): EPSG code of the input data (kept for API symmetry).
+        reference_dsm (str): Path to a DSM whose grid/extent/CRS to match.
+        csf_params (dict): Output of :func:`laz_pre_analysis`.
+        intermethod (str): Interpolation method for the ground grid.
+        output_path (str): Output GeoTIFF path. Default 'dtm_csf.tif'.
+
+    Returns:
+        str: The output path.
+    """
+    try:
+        import CSF
+    except ImportError as e:
+        raise ImportError(
+            "generate_dtm_with_csf_last_returns requires the optional 'CSF' "
+            "package. Install it with: pip install cloth-simulation-filter"
+        ) from e
+
+    print("[i] Generating DTM with CSF (Using Last Returns input)...")
+
+    with rasterio.open(reference_dsm) as src:
+        transform = src.transform
+        width = src.width
+        height = src.height
+        bounds = src.bounds
+        crs = src.crs
+
+    las = laspy.read(input_laz)
+
+    # Filter for last returns before CSF
+    mask = las.return_number == las.number_of_returns
+    x_filtered = np.array(las.x)[mask]
+    y_filtered = np.array(las.y)[mask]
+    z_filtered = np.array(las.z)[mask]
+
+    coords = np.vstack((x_filtered, y_filtered, z_filtered)).T
+
+    csf = CSF.CSF()
+    csf.params.bSloopSmooth = True
+    csf.params.cloth_resolution = csf_params['cloth_resolution']
+    csf.params.rigidness = csf_params['rigidness']
+    csf.params.class_threshold = csf_params['class_threshold']
+    csf.setPointCloud(coords)
+
+    ground_indices = CSF.VecInt()
+    non_ground_indices = CSF.VecInt()
+    csf.do_filtering(ground_indices, non_ground_indices)
+
+    ground_points = coords[list(ground_indices)]
+
+    gx = np.linspace(bounds.left, bounds.right, width)
+    gy = np.linspace(bounds.bottom, bounds.top, height)
+    xx, yy = np.meshgrid(gx, gy)
+
+    dtm_grid = griddata(
+        (ground_points[:, 0], ground_points[:, 1]),
+        ground_points[:, 2],
+        (xx, yy),
+        method=intermethod
+    )
+
+    profile = {'driver': 'GTiff', 'dtype': 'float32', 'count': 1,
+               'width': width, 'height': height, 'transform': transform,
+               'crs': crs, 'nodata': -9999}
+
+    with rasterio.open(output_path, 'w', **profile) as dst:
+        dst.write(dtm_grid.astype(np.float32), 1)
+
+    print("[\u2713] DTM Generated using Last Returns + CSF.")
+    return output_path
+
+
+def align_rasters(src_path, target_path, output_path):
+    """
+    Reproject/resample ``src_path`` onto the grid implied by ``target_path``
+    and write the result to ``output_path`` (bilinear resampling).
+
+    Returns:
+        str: The output path.
+    """
+    with rasterio.open(src_path) as src:
+        with rasterio.open(target_path) as target:
+            transform, width, height = calculate_default_transform(
+                src.crs, target.crs, target.width, target.height, *target.bounds
+            )
+            profile = src.profile
+            profile.update(transform=transform, width=width, height=height)
+
+            with rasterio.open(output_path, 'w', **profile) as dst:
+                reproject(
+                    source=rasterio.band(src, 1),
+                    destination=rasterio.band(dst, 1),
+                    src_transform=src.transform,
+                    src_crs=src.crs,
+                    dst_transform=transform,
+                    dst_crs=target.crs,
+                    resampling=Resampling.bilinear
+                )
+    return output_path
+
+
+def analyze_low_res_ndhm(ndhm_path, downscale_factor=3,
+                         building_min_height=2.5,
+                         height_factor=0.4, tri_factor=0.75,
+                         min_height_thresh=2.0, min_tri_thresh=1.0):
+    """
+    Analyze a downsampled nDHM to derive adaptive height and TRI thresholds.
+
+    Building-like cells (above ``building_min_height``) drive an average
+    height estimate and an 85th-percentile slope estimate, which are scaled
+    into final thresholds and clamped to safe minimums.
+
+    Args:
+        ndhm_path (str): Path to the nDHM raster.
+        downscale_factor (int): Pyramid downscale factor.
+        building_min_height (float): Height above which a cell is considered
+            a potential building.
+        height_factor (float): Multiplier applied to the average height.
+        tri_factor (float): Multiplier applied to the slope estimate.
+        min_height_thresh (float): Lower bound for the height threshold.
+        min_tri_thresh (float): Lower bound for the TRI threshold.
+
+    Returns:
+        dict: ``{'height_threshold', 'tri_threshold'}``.
+    """
+    print(f"[i] Analyzing coarse-scale nDHM (downscale 1/{downscale_factor})...")
+
+    with rasterio.open(ndhm_path) as src:
+        new_height = src.height // downscale_factor
+        new_width = src.width // downscale_factor
+
+        low_res_data = src.read(
+            out_shape=(src.count, new_height, new_width),
+            resampling=Resampling.average
+        )[0]
+
+        potential_buildings = low_res_data[low_res_data > building_min_height]
+        avg_height = np.mean(potential_buildings) if potential_buildings.size > 0 else 5.0
+
+        gy, gx = np.gradient(low_res_data)
+        slope = np.sqrt(gx ** 2 + gy ** 2)
+        potential_slopes = slope[low_res_data > building_min_height]
+        avg_slope = np.percentile(potential_slopes, 85) if potential_slopes.size > 0 else 1.0
+
+        print(f"[\u2713] Coarse analysis complete: AvgHeight={avg_height:.2f}, AvgSlope={avg_slope:.2f}")
+
+        adaptive_height_thresh = max(avg_height * height_factor, min_height_thresh)
+        adaptive_tri_thresh = max(avg_slope * tri_factor, min_tri_thresh)
+
+        return {
+            'height_threshold': adaptive_height_thresh,
+            'tri_threshold': adaptive_tri_thresh
+        }
+
+
+def fxaa_like_smoothing(mask, blend_strength=0.8):
+    """
+    Apply an FXAA-style, edge-aware smoothing to a binary mask.
+
+    Args:
+        mask (numpy.ndarray): Binary (0/1) mask.
+        blend_strength (float): 0-1; higher blends more along detected edges.
+
+    Returns:
+        numpy.ndarray: Smoothed binary mask (uint8, 0/1).
+    """
+    img = mask.astype(np.float32)
+
+    grad_x = cv2.Sobel(img, cv2.CV_32F, 1, 0, ksize=3)
+    grad_y = cv2.Sobel(img, cv2.CV_32F, 0, 1, ksize=3)
+    edge_strength = np.sqrt(grad_x ** 2 + grad_y ** 2)
+    edge_strength = edge_strength / (edge_strength.max() + 1e-6)
+
+    blurred = cv2.GaussianBlur(img, (3, 3), 0)
+    result = img * (1 - blend_strength * edge_strength) + blurred * (blend_strength * edge_strength)
+
+    return (result > 0.5).astype(np.uint8)
+
+
+def extract_building_footprints_with_alphashape(raster_path, alpha,
+                                                adaptive_height_threshold,
+                                                epsg_code, kernel_size=0,
+                                                output_path='alpha_shape_buildings.geojson',
+                                                show_plot=False):
+    """
+    Extract building footprints from an nDHM using an alpha shape.
+
+    Cells above ``adaptive_height_threshold`` form a binary mask which is
+    optionally cleaned with a morphological opening + FXAA smoothing
+    (when ``kernel_size > 0``), converted to world coordinates, and wrapped
+    in an alpha shape that is saved as GeoJSON.
+
+    Requires the optional ``alphashape`` package. ``matplotlib`` is only
+    imported when ``show_plot=True``.
+
+    Args:
+        raster_path (str): Path to the nDHM raster.
+        alpha (float): Alpha value (higher = tighter / more detail).
+        adaptive_height_threshold (float): Height cutoff for the mask.
+        epsg_code (int): EPSG code to tag the output GeoJSON with.
+        kernel_size (int): Morphological-open kernel size (0 disables).
+        output_path (str): Output GeoJSON path.
+        show_plot (bool): If True, show a before/after mask plot.
+
+    Returns:
+        str | None: Output path, or ``None`` if no polygon could be built.
+    """
+    try:
+        import alphashape
+    except ImportError as e:
+        raise ImportError(
+            "extract_building_footprints_with_alphashape requires the optional "
+            "'alphashape' package. Install it with: pip install alphashape"
+        ) from e
+
+    from scipy.ndimage import binary_opening
+
+    with rasterio.open(raster_path) as src:
+        ndhm = src.read(1)
+        transform = src.transform
+
+        print(f"[\u2713] Using adaptive height threshold: {adaptive_height_threshold:.2f}m")
+
+        mask_raw = ndhm > adaptive_height_threshold
+        mask = mask_raw.copy()
+
+        if kernel_size > 0:
+            print(f"[i] Applying Pre-Alpha Morphological Opening (Kernel: {kernel_size})...")
+            structure = np.ones((kernel_size, kernel_size)).astype(bool)
+            mask = binary_opening(mask_raw, structure=structure)
+            mask = fxaa_like_smoothing(mask)
+            print("[i] Applied FXAA-style edge smoothing to the mask")
+
+            if show_plot:
+                import matplotlib.pyplot as plt
+                plt.figure(figsize=(15, 8))
+                plt.subplot(1, 2, 1)
+                plt.title("BEFORE: Raw Height Threshold", fontsize=10)
+                plt.imshow(mask_raw, cmap='gray', interpolation='none')
+                plt.axis('off')
+                plt.subplot(1, 2, 2)
+                plt.title("AFTER: Morph + FXAA Smoothing", fontsize=10)
+                plt.imshow(mask, cmap='gray', interpolation='none')
+                plt.axis('off')
+                plt.tight_layout()
+                plt.show()
+        else:
+            print("[i] Kernel size is 0, skipping morphological open.")
+
+        rows, cols = np.where(mask)
+        coords = np.array([transform * (col + 0.5, row + 0.5)
+                           for row, col in zip(rows, cols)])
+
+    if len(coords) < 4:
+        print("Not enough points for alpha shape.")
+        return None
+
+    print(f"[i] Generating alpha shape with alpha: {alpha}")
+    poly = alphashape.alphashape(coords, alpha)
+
+    if poly is None or poly.is_empty:
+        print("No polygon could be formed.")
+        return None
+
+    gdf = gpd.GeoDataFrame(geometry=[poly], crs=f"EPSG:{epsg_code}")
+    gdf.to_file(output_path, driver='GeoJSON')
+    print(f"[\u2713] Alpha shape saved to {output_path}")
+    return output_path
+
+
+def rasterize_geojson(geojson_file, reference_raster, output_tiff, target_epsg=3857):
+    """
+    Rasterize a GeoJSON onto the grid of a reference raster.
+
+    The GeoJSON is reprojected to ``target_epsg`` (default EPSG:3857, matching
+    the rest of this library) before rasterization.
+
+    Args:
+        geojson_file (str): Input GeoJSON path.
+        reference_raster (str): Raster whose transform/extent to match.
+        output_tiff (str): Output GeoTIFF path.
+        target_epsg (int): CRS to reproject the geometries into.
+
+    Returns:
+        str: The output path.
+    """
+    gdf = gpd.read_file(geojson_file)
+    gdf = gdf.to_crs(epsg=target_epsg)
+
+    with rasterio.open(reference_raster) as src:
+        profile = src.profile.copy()
+        transform = src.transform
+        out_shape = (src.height, src.width)
+
+    shapes = ((geom, 1) for geom in gdf.geometry)
+
+    rasterized = rasterio.features.rasterize(
+        shapes=shapes,
+        out_shape=out_shape,
+        transform=transform,
+        fill=0,
+        dtype='uint8'
+    )
+
+    profile.update(dtype='uint8', count=1)
+    with rasterio.open(output_tiff, 'w', **profile) as dst:
+        dst.write(rasterized, 1)
+
+    print("Rasterized GeoJSON saved to:", output_tiff)
+    return output_tiff
