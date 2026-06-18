@@ -4,5 +4,17 @@ scipy==1.10.1
 rasterio==1.3.4
 opencv-python==4.7.0.72
 laspy==2.0.0
+lazrs==0.5.0
 proj==0.2.0
 shapely>= 1.8.4
+geopandas>= 0.13.2
+
+# --- Optional (adaptive pipeline only; imported lazily) ---
+# Needed by the TestLaz/TestSingleLaz.py example:
+#   generate_dtm_with_csf_last_returns          -> cloth-simulation-filter (CSF module)
+#   extract_building_footprints_with_alphashape -> alphashape
+#   ...with show_plot=True                      -> matplotlib
+# Install all of them with:  pip install LasBuildSeg[adaptive]
+# cloth-simulation-filter
+# alphashape
+# matplotlib
