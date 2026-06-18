@@ -1,9 +1,9 @@
-# LasBuildSeg — Building Footprint Extraction from LiDAR
+# LasBuildSeg  Building Footprint Extraction from LiDAR
 
 This Python package extracts building footprints from airborne LiDAR point clouds.
 
 **As of v0.2.1 the workflow is adaptive:** instead of fixed thresholds, the key
-parameters are estimated from the data itself — the CSF cloth settings from point
+parameters are estimated from the data itself  the CSF cloth settings from point
 density and terrain slope, and the building height / TRI thresholds from a coarse
 nDHM. The classic threshold-based functions are still included and unchanged.
 
